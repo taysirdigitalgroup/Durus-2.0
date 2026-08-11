@@ -1,0 +1,35 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+pubspec.lock
+
+# Android
+android/local.properties
+android/**/gradle-wrapper.jar
+android/.gradle/
+android/captures/
+# ATTENTION : build.gradle.kts lit key.properties via rootProject.file(...),
+# donc le vrai emplacement est android/key.properties (PAS android/app/).
+android/key.properties
+android/app/key.properties
+*.jks
+*.keystore
+android/key.properties.example.local
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# macOS
+.DS_Store
+
+# APK/AAB signés produits localement avant upload sur GitHub Releases
+# (le binaire est public par nature, mais autant garder le repo git léger
+# et éviter tout risque d'y glisser accidentellement un .jks à côté)
+releases/

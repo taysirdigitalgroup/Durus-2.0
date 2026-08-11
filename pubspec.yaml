@@ -1,0 +1,54 @@
+name: durus2
+description: "Durus 2.0 - Bibliothèque du Coran et des Livres de Cheikh Ahmadou Bamba Khadimou Rassoul"
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # État applicatif
+  provider: ^6.1.2
+
+  # Réseau (catalogue GitHub + téléchargement des images)
+  http: ^1.2.2
+
+  # Persistance locale (collections, positions, marque-page)
+  sqflite: ^2.3.3+1
+  path: ^1.9.0
+  path_provider: ^2.1.4
+
+  # Cache disque du catalogue (arbre GitHub) + petites préférences (dernier bookmark rapide)
+  shared_preferences: ^2.3.2
+
+  # Page "Développeur / À propos" : version de l'app + ouverture de liens externes
+  package_info_plus: ^8.0.2
+  url_launcher: ^6.3.1
+
+  # Icônes Material
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.2
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icon/
+    - assets/tdg/
+
+# Généré via : dart run flutter_launcher_icons
+# (à relancer si l'icône est modifiée)
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/icon_legacy_1024.png"
+  adaptive_icon_background: "assets/icon/ic_background_adaptive.png"
+  adaptive_icon_foreground: "assets/icon/ic_foreground_adaptive.png"
+  min_sdk_android: 21

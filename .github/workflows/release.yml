@@ -1,0 +1,73 @@
+name: Build & Release APK
+
+# Se déclenche à chaque push d'un tag "vX.Y.Z" (ex. v2.0.0), et peut aussi
+# être lancé manuellement depuis l'onglet Actions du repo.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write # nécessaire pour créer la Release GitHub
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Installer Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Installer Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.35.0" # ajuste à la version utilisée en local
+          channel: "stable"
+          cache: true
+
+      - name: Récupérer les dépendances
+        run: flutter pub get
+
+      # ---- Reconstitue le keystore et key.properties à partir des
+      # secrets du repo (jamais commités, voir plus bas comment les créer) ----
+      - name: Décoder le keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/durus2-release.jks
+
+      - name: Générer key.properties
+        run: |
+          cat > android/key.properties <<EOF
+          storePassword=${{ secrets.ANDROID_STORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          storeFile=durus2-release.jks
+          EOF
+
+      - name: Build APK signé (release)
+        run: flutter build apk --release
+
+      # splits.abi est activé dans build.gradle.kts (armeabi-v7a, arm64-v8a,
+      # x86_64 + un universel) : on récupère tous les APK produits.
+      - name: Lister les APK générés
+        run: ls -la build/app/outputs/flutter-apk/
+
+      - name: Publier la Release GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/app/outputs/flutter-apk/*.apk
+          generate_release_notes: true
+          name: Durus 2.0 ${{ github.ref_name }}
+
+      # Nettoyage : évite de laisser le keystore déchiffré dans le
+      # workspace du runner à la fin du job (bonne pratique, même si le
+      # runner est jetable).
+      - name: Nettoyer les secrets décodés
+        if: always()
+        run: |
+          rm -f android/app/durus2-release.jks android/key.properties

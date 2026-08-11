@@ -1,0 +1,9 @@
+# Copie ce fichier en "key.properties" (même dossier), remplis les vraies
+# valeurs, et NE LE COMMITE JAMAIS (déjà exclu par .gitignore : android/app/key.properties).
+# Place ce fichier-ci directement dans android/ (pas dans android/app/) —
+# c'est ce que build.gradle.kts lit via rootProject.file("key.properties").
+
+storePassword=CHANGE_ME
+keyPassword=CHANGE_ME
+keyAlias=durus2
+storeFile=/chemin/absolu/vers/durus2-release.jks
