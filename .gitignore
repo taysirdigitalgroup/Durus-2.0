@@ -33,3 +33,4 @@ android/key.properties.example.local
 # (le binaire est public par nature, mais autant garder le repo git léger
 # et éviter tout risque d'y glisser accidentellement un .jks à côté)
 releases/
+durus2-datas/
