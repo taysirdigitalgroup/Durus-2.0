@@ -67,7 +67,7 @@ class AppConstants {
   // Cache du catalogue distant (arbre GitHub)
   // ---------------------------------------------------------------------
   static const String catalogCacheFileName = 'xassidati_catalog_cache.json';
-  static const Duration catalogCacheTtl = Duration(hours: 12);
+  static const Duration catalogCacheTtl = Duration(hours: 24);
   // v2 : la clé a été changée car la v1 ne mettait en cache que la liste
   // plate des chemins de fichiers (List<String>), format incompatible avec
   // le cache v2 qui contient le catalogue complet (groupes + config.json

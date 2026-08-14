@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../data/repositories/library_repository.dart';
+import '../collections/collection_picker_dialog.dart';
+import '../download/download_controller.dart';
 import '../library/library_controller.dart';
 import '../library/library_sidebar_state.dart';
 import 'viewer_controller.dart';
@@ -63,12 +65,23 @@ class _ReaderBodyState extends State<ReaderBody> {
     final config = viewer.currentBookConfig;
     final theme = Theme.of(context);
 
+    final group = viewer.currentPageGroup;
+    final book = viewer.currentPageBook;
+    // Livre "en cours" (au sens téléchargement) : indisponible en lecture
+    // groupée cross-collection tant qu'on ne connaît pas encore group/book
+    // de la page affichée — le bouton télécharger/supprimer est alors
+    // simplement masqué plutôt que de risquer une action sur le mauvais
+    // livre.
+    final isDownloaded = (group != null && book != null)
+        ? context.select<LibraryController, bool>((c) => c.isDownloaded(group, book))
+        : false;
+
     return Material(
       color: theme.colorScheme.surfaceContainerHighest,
       child: InkWell(
         onTap: () => _showBookInfo(context, viewer),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           child: Row(
             children: [
               Expanded(
@@ -79,6 +92,7 @@ class _ReaderBodyState extends State<ReaderBody> {
                     Text(
                       config?.nomLatin ?? viewer.currentBook ?? '',
                       maxLines: 1,
+                      softWrap: false,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleSmall,
                     ),
@@ -86,6 +100,7 @@ class _ReaderBodyState extends State<ReaderBody> {
                       Text(
                         config.nomArabe,
                         maxLines: 1,
+                        softWrap: false,
                         overflow: TextOverflow.ellipsis,
                         textDirection: TextDirection.rtl,
                         style: theme.textTheme.bodySmall,
@@ -93,22 +108,99 @@ class _ReaderBodyState extends State<ReaderBody> {
                   ],
                 ),
               ),
-              IconButton(
+              _ReaderBarIconButton(
                 tooltip: 'Localiser dans la bibliothèque',
-                icon: const Icon(Icons.my_location),
+                icon: Icons.my_location,
                 onPressed: () => _locateCurrentBookInSidebar(context, viewer),
               ),
-              IconButton(
+              if (group != null && book != null)
+                isDownloaded
+                    ? _ReaderBarIconButton(
+                        tooltip: 'Supprimer définitivement',
+                        icon: Icons.delete_outline,
+                        color: Colors.red,
+                        onPressed: () => _confirmDeleteFromReader(context, group: group, book: book),
+                      )
+                    : _ReaderBarIconButton(
+                        tooltip: 'Télécharger',
+                        icon: Icons.download,
+                        color: Colors.green,
+                        onPressed: () => _downloadFromReader(
+                          context,
+                          group: group,
+                          book: book,
+                          bookTitle: config?.nomLatin ?? book,
+                        ),
+                      ),
+              _ReaderBarIconButton(
                 tooltip: 'Portrait / Paysage',
-                icon: Icon(_portraitMode ? Icons.stay_current_landscape : Icons.stay_current_portrait),
+                icon: _portraitMode ? Icons.stay_current_landscape : Icons.stay_current_portrait,
                 onPressed: () => setState(() => _portraitMode = !_portraitMode),
               ),
-              const Icon(Icons.info_outline, size: 18),
+              _ReaderBarIconButton(
+                tooltip: 'Infos du livre',
+                icon: Icons.info_outline,
+                onPressed: () => _showBookInfo(context, viewer),
+              ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _downloadFromReader(
+    BuildContext context, {
+    required String group,
+    required String book,
+    required String bookTitle,
+  }) async {
+    final chosen = await showCollectionPickerDialog(context, bookTitle: bookTitle);
+    if (chosen == null || !context.mounted) return;
+
+    await context.read<DownloadController>().addToCollection(
+          group: group,
+          book: book,
+          collectionId: chosen.collectionId,
+          collectionTitle: chosen.collectionTitle,
+        );
+
+    if (context.mounted) {
+      await context.read<LibraryController>().refreshDownloadedBooks();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('"$bookTitle" ajouté à "${chosen.collectionTitle}".')),
+      );
+    }
+  }
+
+  Future<void> _confirmDeleteFromReader(
+    BuildContext context, {
+    required String group,
+    required String book,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Supprimer définitivement'),
+        content: const Text(
+          'Ce livre sera supprimé de TOUTES vos collections et ses fichiers seront effacés. Continuer ?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      await context.read<DownloadController>().deleteBookEverywhere(group: group, book: book);
+      if (context.mounted) {
+        await context.read<LibraryController>().refreshDownloadedBooks();
+      }
+    }
   }
 
   Widget _buildBody(ViewerController viewer) {
@@ -292,6 +384,39 @@ class _ReaderBodyState extends State<ReaderBody> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Bouton icône compact pour la barre d'infos du lecteur : plus petit et
+/// plus rapproché qu'un `IconButton` standard, pour que les 4 boutons
+/// (localiser, télécharger/supprimer, rotation, infos) tiennent à côté
+/// d'un titre qui peut être long (lequel garde la priorité de l'espace
+/// disponible et se tronque avec des points de suspension).
+class _ReaderBarIconButton extends StatelessWidget {
+  final String tooltip;
+  final IconData icon;
+  final Color? color;
+  final VoidCallback? onPressed;
+
+  const _ReaderBarIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      icon: Icon(icon, color: color),
+      onPressed: onPressed,
+      iconSize: 19,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      splashRadius: 20,
     );
   }
 }

@@ -99,6 +99,175 @@ class GithubLibraryRepository {
     return groups;
   }
 
+  /// Actualisation incrémentale du catalogue (utilisée par le filet de
+  /// sécurité périodique ET par le "tiré vers le bas" manuel) :
+  ///  - si le cache est encore valide (< TTL) et [force] est faux, ne fait
+  ///    STRICTEMENT AUCUN appel réseau et renvoie le catalogue déjà connu ;
+  ///  - sinon, récupère juste l'arbre du dépôt (UN SEUL appel) et le
+  ///    compare au catalogue déjà connu : les livres déjà présents
+  ///    GARDENT leur config déjà chargée (aucune requête config.json
+  ///    relancée pour eux), seuls les groupes/livres VRAIMENT nouveaux
+  ///    voient leur config.json récupérée, et les groupes/livres qui ont
+  ///    disparu du dépôt distant sont retirés silencieusement.
+  ///
+  /// Contrairement à [fetchCatalog]`(forceRefresh: true)` (qui rejoue
+  /// l'hydratation complète, donc re-télécharge TOUS les config.json), ça
+  /// ne "vide" jamais le catalogue déjà affiché : c'est une fusion, pas un
+  /// remplacement.
+  Future<List<BookGroup>> syncCatalog({
+    bool force = false,
+    void Function(int done, int total)? onNewBooksProgress,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Base de comparaison : catalogue déjà en mémoire, sinon celui persisté
+    // sur disque (même expiré — ça reste une bien meilleure base qu'un
+    // catalogue vide, qui obligerait à tout re-télécharger).
+    Map<String, Map<String, BookEntry>>? baseline;
+    if (_cachedCatalog != null) {
+      baseline = _asBaselineMap(_cachedCatalog!);
+    } else {
+      final cachedJson = prefs.getString(AppConstants.prefsCatalogCacheKey);
+      if (cachedJson != null) {
+        try {
+          baseline = _asBaselineMap(_deserializeCatalog(cachedJson));
+        } catch (_) {
+          // Cache corrompu : on traitera ça comme un tout premier
+          // chargement ci-dessous.
+        }
+      }
+    }
+
+    // Aucune base connue (tout premier lancement, ou cache corrompu) :
+    // impossible de "diffuser" quoi que ce soit, on fait le chargement
+    // initial complet habituel.
+    if (baseline == null) {
+      return fetchCatalog(forceRefresh: false);
+    }
+
+    if (!force) {
+      final cachedTs = prefs.getInt(AppConstants.prefsCatalogCacheTimestampKey);
+      final age = cachedTs == null
+          ? null
+          : DateTime.now().millisecondsSinceEpoch - cachedTs;
+      if (age != null && age < AppConstants.catalogCacheTtl.inMilliseconds) {
+        // Cache encore frais : rien à faire, aucun appel réseau.
+        _cachedCatalog ??= _baselineToGroupList(baseline);
+        return _cachedCatalog!;
+      }
+    }
+
+    final paths = await _fetchRepoTreePaths();
+    final skeleton = _buildSkeletonFromTreePaths(paths);
+
+    _imagesByBook = {};
+    final allEntries = <MapEntry<String, MapEntry<String, _RawBookData>>>[];
+    skeleton.forEach((groupName, books) {
+      books.forEach((bookFolder, data) {
+        allEntries.add(MapEntry(groupName, MapEntry(bookFolder, data)));
+      });
+    });
+
+    // Sépare les entrées déjà connues (réutilisées telles quelles, sans la
+    // moindre requête réseau) des entrées vraiment nouvelles (config.json
+    // à récupérer). Ce qui reste dans [baseline] à la fin de cette boucle,
+    // ce sont précisément les groupes/livres qui ont disparu du dépôt
+    // distant — on les laisse simplement de côté (suppression implicite).
+    final results = <String, Map<String, BookEntry>>{};
+    final newEntries = <MapEntry<String, MapEntry<String, _RawBookData>>>[];
+
+    for (final entry in allEntries) {
+      final groupName = entry.key;
+      final bookFolder = entry.value.key;
+      final data = entry.value.value;
+      final key = '$groupName/$bookFolder';
+
+      data.imagePaths.sortNaturalBy((p) => p.split('/').last);
+      _imagesByBook![key] = data.imagePaths
+          .map((p) => RemoteBookImage(
+                group: groupName,
+                book: bookFolder,
+                fileName: p.split('/').last,
+                fullPath: p,
+              ))
+          .toList();
+
+      final existing = baseline[groupName]?[bookFolder];
+      if (existing != null) {
+        results.putIfAbsent(groupName, () => {});
+        results[groupName]![bookFolder] = existing;
+      } else {
+        newEntries.add(entry);
+      }
+    }
+
+    final total = newEntries.length;
+    var done = 0;
+    const batchSize = AppConstants.catalogConfigConcurrentRequests;
+    for (var i = 0; i < newEntries.length; i += batchSize) {
+      final batch = newEntries.skip(i).take(batchSize);
+      await Future.wait(batch.map((entry) async {
+        final groupName = entry.key;
+        final bookFolder = entry.value.key;
+
+        final config = await _fetchConfigJson(groupName, bookFolder, fallback: bookFolder);
+        results.putIfAbsent(groupName, () => {});
+        results[groupName]![bookFolder] = BookEntry(folder: bookFolder, group: groupName, config: config);
+
+        done++;
+        onNewBooksProgress?.call(done, total);
+      }));
+    }
+
+    final groups = _sortedGroupList(results);
+
+    await prefs.setString(AppConstants.prefsCatalogCacheKey, _serializeCatalog(groups));
+    await prefs.setInt(
+      AppConstants.prefsCatalogCacheTimestampKey,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+
+    _cachedCatalog = groups;
+    return groups;
+  }
+
+  Map<String, Map<String, BookEntry>> _asBaselineMap(List<BookGroup> groups) {
+    final map = <String, Map<String, BookEntry>>{};
+    for (final g in groups) {
+      map[g.name] = {for (final b in g.books) b.folder: b};
+    }
+    return map;
+  }
+
+  List<BookGroup> _baselineToGroupList(Map<String, Map<String, BookEntry>> baseline) =>
+      _sortedGroupList(baseline);
+
+  /// Trie groupes et livres de la même façon que l'hydratation complète
+  /// (arabe d'abord, puis ordre naturel) — factorisé pour être partagé
+  /// entre [_hydrateWithRealConfigs] et [syncCatalog].
+  List<BookGroup> _sortedGroupList(Map<String, Map<String, BookEntry>> results) {
+    final groupList = <BookGroup>[];
+    results.forEach((groupName, books) {
+      final entries = books.values.toList();
+      entries.sort((a, b) {
+        if (a.isArabic && !b.isArabic) return -1;
+        if (!a.isArabic && b.isArabic) return 1;
+        return naturalCompare(a.displayName, b.displayName);
+      });
+      groupList.add(BookGroup(name: groupName, books: entries));
+    });
+
+    groupList.sort((a, b) {
+      final aArabic = a.books.any((e) => e.isArabic);
+      final bArabic = b.books.any((e) => e.isArabic);
+      if (aArabic && !bArabic) return -1;
+      if (!aArabic && bArabic) return 1;
+      return naturalCompare(a.name, b.name);
+    });
+
+    return groupList;
+  }
+
   /// Appelle l'API Git Trees (recursive=1) et retourne la liste de tous les
   /// chemins de fichiers "blob" du dépôt.
   Future<List<String>> _fetchRepoTreePaths() async {
@@ -197,26 +366,7 @@ class GithubLibraryRepository {
       }));
     }
 
-    final groupList = <BookGroup>[];
-    results.forEach((groupName, books) {
-      final entries = books.values.toList();
-      entries.sort((a, b) {
-        if (a.isArabic && !b.isArabic) return -1;
-        if (!a.isArabic && b.isArabic) return 1;
-        return naturalCompare(a.displayName, b.displayName);
-      });
-      groupList.add(BookGroup(name: groupName, books: entries));
-    });
-
-    groupList.sort((a, b) {
-      final aArabic = a.books.any((e) => e.isArabic);
-      final bArabic = b.books.any((e) => e.isArabic);
-      if (aArabic && !bArabic) return -1;
-      if (!aArabic && bArabic) return 1;
-      return naturalCompare(a.name, b.name);
-    });
-
-    return groupList;
+    return _sortedGroupList(results);
   }
 
   /// Tente de récupérer et parser le config.json distant d'un livre.

@@ -32,6 +32,17 @@ class LibraryRepository {
   }) =>
       remote.fetchCatalog(forceRefresh: forceRefresh, onProgress: onProgress);
 
+  /// Actualisation incrémentale (voir [GithubLibraryRepository.syncCatalog]) :
+  /// n'efface jamais le catalogue déjà affiché, ajoute discrètement les
+  /// groupes/livres nouveaux et retire ceux qui n'existent plus dans le
+  /// dépôt distant. Gratuite en réseau (aucun appel) si le cache a moins de
+  /// 24h et que [force] est faux.
+  Future<List<BookGroup>> syncCatalog({
+    bool force = false,
+    void Function(int done, int total)? onNewBooksProgress,
+  }) =>
+      remote.syncCatalog(force: force, onNewBooksProgress: onNewBooksProgress);
+
   /// Résout la config d'un livre en essayant, dans l'ordre :
   ///  1. le catalogue distant déjà en cache mémoire, ou un appel réseau
   ///     frais (source de vérité prioritaire quand disponible) ;

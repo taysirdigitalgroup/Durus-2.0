@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/utils/text_utils.dart';
 import '../../data/local/collections_repository.dart';
 import '../../data/models/book_entry.dart';
@@ -108,10 +109,16 @@ class LibraryController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Actualisation manuelle (ex. "tiré vers le bas") : incrémentale, donc
+  /// NE VIDE JAMAIS le catalogue déjà affiché. Vérifie le dépôt distant,
+  /// ajoute discrètement les groupes/livres nouveaux et retire ceux qui
+  /// n'y existent plus — sans re-télécharger le config.json des livres
+  /// déjà connus. `force: true` ignore la fraîcheur du cache (24h) puisque
+  /// l'utilisateur demande explicitement une vérification.
   Future<void> refresh() async {
     await refreshDownloadedBooks();
     try {
-      groups = await libraryRepository.fetchCatalog(forceRefresh: true);
+      groups = await libraryRepository.syncCatalog(force: true);
       state = LibraryLoadState.loaded;
       errorMessage = null;
     } catch (e) {
@@ -124,10 +131,12 @@ class LibraryController extends ChangeNotifier {
   /// Démarre une actualisation périodique et silencieuse du catalogue (et
   /// des livres téléchargés) en arrière-plan, pour que les groupes/livres
   /// fraîchement ajoutés au dépôt distant finissent par apparaître même
-  /// sans action explicite de l'utilisateur (le cache disque a une TTL de
-  /// plusieurs heures). L'intervalle peut être assez éloigné : ce n'est
-  /// qu'un filet de sécurité en complément du "tiré vers le bas" manuel.
-  void startAutoRefresh({Duration interval = const Duration(minutes: 15)}) {
+  /// sans action explicite de l'utilisateur. Le cadencement effectif reste
+  /// de toute façon plafonné à 24h par [LibraryRepository.syncCatalog] (via
+  /// `AppConstants.catalogCacheTtl`) : ce minuteur n'est qu'un filet de
+  /// sécurité pour une app restée ouverte très longtemps sans jamais
+  /// repasser en arrière-plan.
+  void startAutoRefresh({Duration interval = AppConstants.catalogCacheTtl}) {
     _autoRefreshTimer?.cancel();
     _autoRefreshTimer = Timer.periodic(interval, (_) => refreshSilently());
   }
@@ -137,14 +146,18 @@ class LibraryController extends ChangeNotifier {
     _autoRefreshTimer = null;
   }
 
-  /// Comme [refresh], mais sans jamais repasser par l'état "loading" (donc
-  /// sans faire clignoter l'UI) : si la requête échoue (hors-ligne...), on
-  /// conserve silencieusement le catalogue déjà affiché. Utilisable aussi
-  /// bien par le minuteur d'actualisation automatique que par un retour au
-  /// premier plan de l'app.
+  /// Comme [refresh], mais : (1) sans jamais repasser par l'état "loading"
+  /// (donc sans faire clignoter l'UI), et (2) plafonnée à une fois toutes
+  /// les 24h (voir [LibraryRepository.syncCatalog]) — un appel ici (ex. à
+  /// chaque retour au premier plan de l'app) ne déclenche donc PAS
+  /// systématiquement une requête réseau. Quand elle a lieu, la
+  /// vérification reste incrémentale : catalogue déjà affiché conservé,
+  /// nouveautés ajoutées discrètement, entrées disparues retirées. En cas
+  /// d'échec (hors-ligne...), on conserve silencieusement le catalogue déjà
+  /// chargé.
   Future<void> refreshSilently() async {
     try {
-      final freshGroups = await libraryRepository.fetchCatalog(forceRefresh: true);
+      final freshGroups = await libraryRepository.syncCatalog();
       groups = freshGroups;
       state = LibraryLoadState.loaded;
       errorMessage = null;
