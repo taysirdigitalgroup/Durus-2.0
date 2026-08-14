@@ -1,7 +1,7 @@
 name: durus2
 description: "Durus 2.0 - Bibliothèque du Coran et des Livres de Cheikh Ahmadou Bamba Khadimou Rassoul"
 publish_to: "none"
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
