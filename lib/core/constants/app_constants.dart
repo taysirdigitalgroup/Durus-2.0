@@ -1,7 +1,7 @@
 /// app_constants.dart
 ///
-/// TOUTES les constantes de l'application Xassidati sont centralisées ici :
-/// dépôt distant des livres (xassidati-datas), URLs GitHub, paramètres de
+/// TOUTES les constantes de l'application Durus 2.0 sont centralisées ici :
+/// dépôt distant des livres (durus2-datas), URLs GitHub, paramètres de
 /// cache, noms de fichiers/dossiers locaux, schéma de base de données,
 /// et quelques réglages d'UI/lecture.
 ///
@@ -21,13 +21,13 @@ class AppConstants {
   static const String androidPackageName = 'com.tdg.durus2';
 
   // ---------------------------------------------------------------------
-  // Dépôt distant des livres (xassidati-datas)
+  // Dépôt distant des livres (durus2-datas)
   // Structure attendue dans le dépôt (identique à l'ancien serveur PHP) :
   //   <groupe>/<livre>/config/config.json
   //   <groupe>/<livre>/images/<n>.<png|jpg|jpeg|gif|webp|bmp|avif|tif|tiff>
   // ---------------------------------------------------------------------
   static const String githubOwner = 'taysirdigitalgroup';
-  static const String githubRepo = 'xassidati-datas';
+  static const String githubRepo = 'durus2-datas';
   static const String githubBranch = 'main';
 
   /// Base des URLs de contenu brut (images, config.json).
@@ -66,20 +66,20 @@ class AppConstants {
   // ---------------------------------------------------------------------
   // Cache du catalogue distant (arbre GitHub)
   // ---------------------------------------------------------------------
-  static const String catalogCacheFileName = 'xassidati_catalog_cache.json';
+  static const String catalogCacheFileName = 'durus2_catalog_cache.json';
   static const Duration catalogCacheTtl = Duration(hours: 24);
   // v2 : la clé a été changée car la v1 ne mettait en cache que la liste
   // plate des chemins de fichiers (List<String>), format incompatible avec
   // le cache v2 qui contient le catalogue complet (groupes + config.json
   // réels). Garder l'ancienne clé aurait fait planter le cast au premier
   // lancement après mise à jour ("String is not a subtype of Map").
-  static const String prefsCatalogCacheKey = 'xassidati_catalog_cache_json_v2';
-  static const String prefsCatalogCacheTimestampKey = 'xassidati_catalog_cache_ts_v2';
+  static const String prefsCatalogCacheKey = 'durus2_catalog_cache_json_v2';
+  static const String prefsCatalogCacheTimestampKey = 'durus2_catalog_cache_ts_v2';
 
   // ---------------------------------------------------------------------
   // Stockage local des livres téléchargés (lecture hors-ligne)
   // ---------------------------------------------------------------------
-  static const String localBooksRootDirName = 'xassidati/books';
+  static const String localBooksRootDirName = 'durus2/books';
 
   /// Nom de la collection créée automatiquement au premier lancement.
   static const String defaultCollectionTitle = 'Dìwàn 1';
@@ -93,7 +93,7 @@ class AppConstants {
   // ---------------------------------------------------------------------
   // Base de données locale (SQLite via sqflite)
   // ---------------------------------------------------------------------
-  static const String databaseFileName = 'xassidati.db';
+  static const String databaseFileName = 'durus2.db';
   static const int databaseVersion = 3;
 
   static const String tableCollection = 'collection';

@@ -89,7 +89,7 @@ class _InfoPageState extends State<InfoPage> {
                 const _AppInfoRow(label: 'Application', value: AppConstants.appName),
                 _AppInfoRow(label: 'Version', value: _version),
                 const _AppInfoRow(label: 'Moteur', value: 'Flutter'),
-                const _AppInfoRow(label: 'Bibliothèque', value: 'xassidati-datas (GitHub)'),
+                const _AppInfoRow(label: 'Bibliothèque', value: '${AppConstants.githubRepo} (GitHub)'),
                 const _AppInfoRow(label: 'Lecture hors-ligne', value: 'Oui, après téléchargement'),
               ],
             ),
