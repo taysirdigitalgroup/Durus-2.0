@@ -64,16 +64,16 @@ class AppConstants {
   static const String bookImagesSubDir = 'images';
 
   // ---------------------------------------------------------------------
-  // Cache du catalogue distant (arbre GitHub)
+  // Cache du catalogue distant (arbre GitHub) v3->24h*7
   // ---------------------------------------------------------------------
   static const String catalogCacheFileName = 'durus2_catalog_cache.json';
-  static const Duration catalogCacheTtl = Duration(hours: 24);
+  static const Duration catalogCacheTtl = Duration(hours: 168);
   // v2 : la clé a été changée car la v1 ne mettait en cache que la liste
   // plate des chemins de fichiers (List<String>), format incompatible avec
   // le cache v2 qui contient le catalogue complet (groupes + config.json
   // réels). Garder l'ancienne clé aurait fait planter le cast au premier
   // lancement après mise à jour ("String is not a subtype of Map").
-  static const String prefsCatalogCacheKey = 'durus2_catalog_cache_json_v2';
+  static const String prefsCatalogCacheKey = 'durus2_catalog_cache_json_v3';
   static const String prefsCatalogCacheTimestampKey = 'durus2_catalog_cache_ts_v2';
 
   // ---------------------------------------------------------------------
